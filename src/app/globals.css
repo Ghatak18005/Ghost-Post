@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+/* 👇 THIS IS THE MISSING MAGIC LINE FOR TAILWIND V4 */
+@variant dark (&:where(.dark, .dark *));
+
+/* 1. Define Variables */
+:root {
+  --color-grid-light: rgba(0, 0, 0, 0.05);
+  --color-grid-dark: rgba(255, 255, 255, 0.05);
+
+  /* Light Mode Defaults */
+  --grid-color: var(--color-grid-light);
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 255, 255, 255;
+}
+
+/* 2. Dark Mode Overrides */
+/* This matches when the 'dark' class is added to the HTML tag */
+.dark {
+  --grid-color: var(--color-grid-dark);
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 0, 0, 0;
+}
+
+/* 3. Base Settings */
+body {
+  color: rgb(var(--foreground-rgb));
+  background: rgb(var(--background-start-rgb));
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* 4. Custom Utilities */
+.text-gradient {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-pink-500 to-red-500;
+}
+
+.bg-grid-pattern {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+}

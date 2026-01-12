@@ -1,0 +1,66 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL") 
+}
+
+// 1. User Model (Standard for NextAuth)
+model User {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  capsules      Capsule[] // Relationship: A user has many capsules
+  createdAt     DateTime  @default(now())
+}
+
+// 2. Account Model (Required for Google Login)
+model Account {
+  id                String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String  @db.ObjectId
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.String
+  access_token      String? @db.String
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.String
+  session_state     String?
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+// 3. Session Model (Required for managing login sessions)
+model Session {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionToken String   @unique
+  userId       String   @db.ObjectId
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// 4. The GhostPost Capsule (Your Core Feature)
+model Capsule {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  content      String   // This will store the ENCRYPTED text
+  iv           String   // The security key for decryption
+  unlockDate   DateTime
+  isPaid       Boolean  @default(false)
+  isDelivered  Boolean  @default(false)
+  recipient    String   // Email of the receiver
+  userId       String   @db.ObjectId
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+}
