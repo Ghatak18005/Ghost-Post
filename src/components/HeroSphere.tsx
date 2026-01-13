@@ -5,7 +5,7 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { MeshDistortMaterial, Sphere, OrbitControls } from "@react-three/drei";
 
 function AnimatedSphere() {
-  const sphereRef = useRef<any>();
+  const sphereRef = useRef<any>(null);
 
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
