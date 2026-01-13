@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 
 // Initialize Stripe with your TEST key
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-
+export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
   const session = await auth();
   if (!session) return new Response("Unauthorized", { status: 401 });
