@@ -22,7 +22,7 @@ export async function GET() {
     //    - NOT sent yet
     const capsulesToSend = await prisma.capsule.findMany({
       where: {
-        unlockDate: { lte: now }, // Unlock date is in the past/now
+        // unlockDate: { lte: now }, // Unlock date is in the past/now
         isSent: false,            // Hasn't been sent
       },
       include: { user: true },
@@ -33,34 +33,66 @@ export async function GET() {
     }
 
     // 2. Loop through and send emails
+    // 2. Loop through and send emails
     for (const capsule of capsulesToSend) {
+      
+      // 1. Prepare Attachment (If image exists)
+      const attachments = [];
+      if (capsule.fileUrl) {
+        attachments.push({
+          filename: 'memory.jpg',
+          path: capsule.fileUrl, // Nodemailer handles Data URIs automatically!
+          cid: 'memory-image'    // Unique ID to reference in the HTML below
+        });
+      }
+
       await transporter.sendMail({
         from: `"GhostPost Time Keeper" <${process.env.GMAIL_USER}>`,
-        to: capsule.recipientEmail, // The address entered by sender
+        to: capsule.recipientEmail,
         subject: `Start Your Legacy: A Message from ${capsule.user.name || "A Friend"}`,
+        
+        // 2. Attach the image file separately
+        attachments: attachments,
+
         html: `
           <div style="font-family: sans-serif; padding: 20px; background: #f5f5f5;">
-            <div style="background: white; padding: 30px; border-radius: 10px; max-width: 600px; margin: auto;">
-              <h1 style="color: #6b21a8;">Time Capsule Unlocked 🔓</h1>
-              <p>Hello,</p>
-              <p><strong>${capsule.user.name}</strong> sealed a message for you on <strong>${new Date(capsule.createdAt).toDateString()}</strong>. The time has finally come to open it.</p>
+            <div style="background: white; padding: 30px; border-radius: 10px; max-width: 600px; margin: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
               
-              <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+              <h1 style="color: #6b21a8; text-align: center; margin-bottom: 30px;">Time Capsule Unlocked 🔓</h1>
               
-              <h3 style="margin-bottom: 10px;">"${capsule.title}"</h3>
-              <p style="font-size: 16px; line-height: 1.6; color: #333;">${capsule.message}</p>
+              <p style="font-size: 16px; color: #555;">Hello,</p>
+              <p style="font-size: 16px; color: #555; line-height: 1.6;">
+                <strong>${capsule.user.name}</strong> sealed a message for you on <strong>${new Date(capsule.createdAt).toDateString()}</strong>. The time has finally come to open it.
+              </p>
               
-              ${capsule.fileUrl ? `<p><a href="${capsule.fileUrl}" style="display: inline-block; padding: 10px 20px; background: #6b21a8; color: white; text-decoration: none; border-radius: 5px;">View Attached Media</a></p>` : ""}
+              <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
               
-              <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+              <h2 style="color: #333; margin-bottom: 15px;">"${capsule.title}"</h2>
               
-              <p style="font-size: 12px; color: #888;">Powered by GhostPost - Digital Legacy Vault</p>
+              <div style="background: #fafafa; padding: 20px; border-radius: 8px; border-left: 4px solid #6b21a8;">
+                <p style="font-size: 16px; line-height: 1.8; color: #333; margin: 0; white-space: pre-wrap;">${capsule.message}</p>
+              </div>
+
+              ${capsule.fileUrl ? `
+                <div style="margin-top: 30px; text-align: center;">
+                  <p style="font-weight: bold; color: #555; margin-bottom: 10px;">Attached Memory:</p>
+                  
+                  <img src="cid:memory-image" alt="Attached Memory" style="max-width: 100%; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" />
+                  
+                </div>
+              ` : ""}
+              
+              <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
+              
+              <p style="font-size: 12px; color: #888; text-align: center;">
+                Powered by GhostPost - Digital Legacy Vault
+              </p>
             </div>
           </div>
         `,
       });
 
-      // 3. Mark as Sent so we don't send it twice
+      // 3. Mark as Sent
       await prisma.capsule.update({
         where: { id: capsule.id },
         data: { isSent: true, status: "OPEN" },

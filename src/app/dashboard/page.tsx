@@ -4,9 +4,9 @@ import Pricing from "@/components/Pricing";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus, Lock, Unlock, Ban } from "lucide-react";
-import CapsuleActions from "./CapsuleActions"; // Ensure this file exists in same folder
+import CapsuleActions from "./CapsuleActions"; 
 
-// Force dynamic so we always see fresh data (new capsules, plan changes)
+// Force dynamic so we always see fresh data
 export const dynamic = "force-dynamic";
 
 export default async function Dashboard() {
@@ -14,7 +14,7 @@ export default async function Dashboard() {
 
   if (!session?.user?.id) return redirect("/api/auth/signin");
 
-  // 1. Fetch User AND their Capsules in one go
+  // 1. Fetch User AND their Capsules
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     include: {
@@ -26,14 +26,13 @@ export default async function Dashboard() {
 
   if (!user) return redirect("/api/auth/signin");
 
-  // 2. Logic to allow/block creating new capsules based on limits
+  // 2. Logic for Limits
   const PLAN_LIMITS = {
     FREE: 3,
     TIME_KEEPER: 10,
-    TIME_LORD: 999999, // Unlimited
+    TIME_LORD: 999999,
   };
   
-  // Default to FREE if plan is missing
   const userPlan = (user.plan as keyof typeof PLAN_LIMITS) || "FREE";
   const limit = PLAN_LIMITS[userPlan];
   const usage = user.capsules.length;
@@ -43,7 +42,7 @@ export default async function Dashboard() {
     <div className="min-h-screen bg-neutral-950 text-white p-8">
       <div className="max-w-7xl mx-auto space-y-12">
         
-        {/* --- HEADER SECTION --- */}
+        {/* --- HEADER --- */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold">Time Vault</h1>
@@ -52,7 +51,6 @@ export default async function Dashboard() {
             </p>
           </div>
           
-          {/* Create Button (Disabled if limit reached) */}
           <Link
             href={canCreate ? "/dashboard/create" : "#pricing-section"}
             className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${
@@ -95,12 +93,10 @@ export default async function Dashboard() {
                 const now = new Date().getTime();
                 const unlockTime = new Date(capsule.unlockDate).getTime();
                 
-                // Calculate Time Remaining in Hours
+                // Calculate Restrictions
                 const hoursLeft = (unlockTime - now) / (1000 * 60 * 60);
-
-                // LOGIC RULES:
-                const canEdit = hoursLeft > 1;     // Editable until 1 hour before
-                const canDelete = hoursLeft > 24;  // Deletable until 24 hours before
+                const canEdit = hoursLeft > 1;     
+                const canDelete = hoursLeft > 24;  
                 
                 return (
                   <div 
@@ -120,11 +116,39 @@ export default async function Dashboard() {
                       <div className={`p-3 rounded-full ${isUnlocked ? 'bg-green-500/10 text-green-500' : 'bg-purple-500/10 text-purple-500'}`}>
                         {isUnlocked ? <Unlock size={20} /> : <Lock size={20} />}
                       </div>
-                      <span className="text-xs font-mono text-neutral-500">
+                      <span className="text-xs font-mono text-neutral-500 mt-2">
                         {new Date(capsule.unlockDate).toLocaleDateString()}
                       </span>
                     </div>
-                    
+
+                    {/* --- 🖼️ IMAGE DISPLAY LOGIC --- */}
+                    {capsule.fileUrl && (
+                      <div className="w-full h-32 mb-4 rounded-xl overflow-hidden relative border border-neutral-800">
+                        {isUnlocked ? (
+                          // 🔓 UNLOCKED: Show Real Image
+                          <img 
+                            src={capsule.fileUrl} 
+                            alt="Memory" 
+                            className="w-full h-full object-cover transition-transform hover:scale-105"
+                          />
+                        ) : (
+                          // 🔒 LOCKED: Show Blurred Image + Lock Icon
+                          <div className="w-full h-full bg-neutral-800 relative">
+                            <img 
+                              src={capsule.fileUrl} 
+                              alt="Locked" 
+                              className="w-full h-full object-cover opacity-30 blur-md"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="bg-black/50 p-2 rounded-full">
+                                <Lock className="text-white/80" size={20} />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <h3 className="text-lg font-bold mb-2 group-hover:text-purple-400 transition">
                       {capsule.title}
                     </h3>
@@ -153,8 +177,8 @@ export default async function Dashboard() {
           )}
         </section>
 
-        {/* --- PRICING SECTION (For Upgrades) --- */}
-       
+        {/* --- PRICING SECTION --- */}
+        
 
       </div>
     </div>

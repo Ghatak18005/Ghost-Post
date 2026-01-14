@@ -3,7 +3,6 @@
 import prisma from "@/lib/prisma";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
-import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 
 // 1. Create Capsule
@@ -12,10 +11,14 @@ export async function createCapsule(formData: FormData) {
   if (!session?.user?.id) return;
 
   const title = formData.get("title") as string;
-  const content = formData.get("content") as string;
+  const content = formData.get("content") as string; // We call it content in the form...
   const dateString = formData.get("scheduledAt") as string;
   const recipientEmail = formData.get("recipientEmail") as string;
   
+  // Note: If you have a file upload in the form, you need to handle it here too.
+  // For now, we'll set fileUrl to null or handle it if you pass it.
+  const fileUrl = formData.get("fileUrl") as string | null; 
+
   if (!title || !content || !dateString || !recipientEmail) {
     throw new Error("Missing fields");
   }
@@ -24,15 +27,19 @@ export async function createCapsule(formData: FormData) {
     data: {
       userId: session.user.id,
       title: title,
-      content: content,
-      unlockDate: new Date(dateString), // Parses the UTC ISO string correctly
-      status: "PENDING",
-      recipient: recipientEmail,
-      iv: randomBytes(16).toString("hex"), 
+      
+      // 👇 MAPPED CORRECTLY TO SCHEMA
+      message: content,        // Schema calls it 'message'
+      recipientEmail: recipientEmail, // Schema calls it 'recipientEmail'
+      unlockDate: new Date(dateString),
+      
+      status: "LOCKED",        // Schema default is 'LOCKED'
+      fileUrl: fileUrl,        // Added this matching your schema
+      isSent: false,
     },
   });
 
-  revalidatePath("/vault");
+  revalidatePath("/dashboard"); // Updated to match your new dashboard path
   redirect("/dashboard");
 }
 
@@ -57,16 +64,13 @@ export async function updateCapsule(formData: FormData) {
   // --- THE 1-HOUR RULE ---
   const unlockTime = new Date(existing.unlockDate).getTime();
   const now = Date.now();
-  const oneHour = 60 * 60 * 1000; // 1 Hour in milliseconds
+  const oneHour = 60 * 60 * 1000; 
 
-  // 1. If it's already unlocked -> No Edit
   if (now >= unlockTime) {
     throw new Error("Cannot edit: Capsule is already unlocked.");
   }
   
-  // 2. If it's unlocking in less than 1 hour -> No Edit
   if (unlockTime - now < oneHour) {
-    // You can also redirect to a custom error page here if you want
     throw new Error("Too late! You cannot edit less than 1 hour before delivery.");
   }
   // ------------------------
@@ -75,13 +79,14 @@ export async function updateCapsule(formData: FormData) {
     where: { id },
     data: {
       title,
-      content,
-      recipient: recipientEmail,
+      
+      // 👇 MAPPED CORRECTLY TO SCHEMA
+      message: content, 
+      recipientEmail: recipientEmail,
       unlockDate: new Date(dateString),
     },
   });
 
-  revalidatePath(`/vault/${id}`);
-  revalidatePath("/vault");
-  redirect(`/vault/${id}`);
+  revalidatePath("/dashboard");
+  redirect("/dashboard");
 }
