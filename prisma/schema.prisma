@@ -11,66 +11,71 @@ datasource db {
 
 // 1. User Model (Standard for NextAuth)
 model User {
-  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  id            String    @id @default(cuid()) @map("_id")
   name          String?
-  email         String    @unique
+  email         String?   @unique
   emailVerified DateTime?
   image         String?
+  
+  // Relations
   accounts      Account[]
   sessions      Session[]
   
-  capsules      Capsule[] // Relationship: A user has many capsules
+  // 👇 ADD THIS LINE (The missing link)
+  capsules      Capsule[] 
+
+  plan             String  @default("FREE")
+  stripeCustomerId String? @unique
   
-  createdAt     DateTime  @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // 2. Account Model (Required for Google Login)
 model Account {
-  id                String  @id @default(auto()) @map("_id") @db.ObjectId
-  userId            String  @db.ObjectId
+  id                String  @id @default(cuid()) @map("_id")
+  userId            String
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.String
-  access_token      String? @db.String
+  refresh_token     String? // @db.String if using SQL, but fine for Mongo
+  access_token      String?
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.String
+  id_token          String?
   session_state     String?
-  
+ 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+ 
   @@unique([provider, providerAccountId])
 }
 
-// 3. Session Model (Required for managing login sessions)
+// 3. SESSION MODEL (Optional, but good for Database Strategy)
 model Session {
-  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  id           String   @id @default(cuid()) @map("_id")
   sessionToken String   @unique
-  userId       String   @db.ObjectId
+  userId       String
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // 4. Capsule Model (Your Custom Data)
 model Capsule {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId      String   @db.ObjectId
+  id             String   @id @default(cuid()) @map("_id")
+  title          String
+  message        String
+  unlockDate     DateTime
+  status         String   @default("LOCKED") // LOCKED, OPEN
+  fileUrl        String?
   
-  // Core Fields
-  title       String   
-  content     String
-  unlockDate  DateTime
-  status      String   @default("PENDING")
-  recipient   String
-  iv          String   // Initialization Vector for encryption
-  
-  // Optional / Metadata
-  isPaid      Boolean? @default(false)
-  isDelivered Boolean? @default(false)
-  createdAt   DateTime @default(now())
-  
-  // Relationship
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // 👇 ADD THESE TWO FIELDS
+  recipientEmail String   // Who gets the email?
+  isSent         Boolean  @default(false) // Did we send it yet?
+
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
