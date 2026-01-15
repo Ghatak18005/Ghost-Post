@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import nodemailer from "nodemailer";
+import { decrypt } from "@/lib/crypto"; // 👈 1. IMPORT DECRYPT
 
-// Prevent build errors
 export const dynamic = 'force-dynamic';
 
 const transporter = nodemailer.createTransport({
@@ -17,13 +17,11 @@ export async function GET() {
   try {
     const now = new Date();
 
-    // 1. Find capsules that are:
-    //    - Unlocked (Time passed)
-    //    - NOT sent yet
+    // Fetch locked capsules that are due (unlockDate <= now)
     const capsulesToSend = await prisma.capsule.findMany({
       where: {
-        // unlockDate: { lte: now }, // Unlock date is in the past/now
-        isSent: false,            // Hasn't been sent
+        unlockDate: { lte: now },
+        isSent: false,
       },
       include: { user: true },
     });
@@ -32,67 +30,64 @@ export async function GET() {
       return NextResponse.json({ message: "No capsules to send." });
     }
 
-    // 2. Loop through and send emails
-    // 2. Loop through and send emails
+    // Loop through and process each capsule
     for (const capsule of capsulesToSend) {
       
-      // 1. Prepare Attachment (If image exists)
-      const attachments = [];
-      if (capsule.fileUrl) {
-        attachments.push({
-          filename: 'memory.jpg',
-          path: capsule.fileUrl, // Nodemailer handles Data URIs automatically!
-          cid: 'memory-image'    // Unique ID to reference in the HTML below
-        });
+      // 👇 2. DECRYPT THE RECIPIENT EMAIL
+      // (The database has scrambled text like "a83f1...", we need the real email "user@gmail.com")
+      const plainEmail = decrypt(capsule.recipientEmail || "");
+      
+      // (Optional) We decrypt these just in case you want to use them in the subject later
+      // const plainTitle = decrypt(capsule.title); 
+
+      // If decryption failed or email is missing, skip to avoid crashing
+      if (!plainEmail || plainEmail.includes("Encrypted Data")) {
+        console.error(`Skipping capsule ${capsule.id}: Invalid decrypted email.`);
+        continue;
       }
+
+      // 👇 GENERATE THE SECURE VIEW LINK
+      const viewLink = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/view/${capsule.id}`;
 
       await transporter.sendMail({
         from: `"GhostPost Time Keeper" <${process.env.GMAIL_USER}>`,
-        to: capsule.recipientEmail,
+        to: plainEmail, // 👈 3. USE THE DECRYPTED EMAIL HERE
         subject: `Start Your Legacy: A Message from ${capsule.user.name || "A Friend"}`,
         
-        // 2. Attach the image file separately
-        attachments: attachments,
-
+        // Professional HTML Template (No attachments, just the Secure Link)
         html: `
-          <div style="font-family: sans-serif; padding: 20px; background: #f5f5f5;">
-            <div style="background: white; padding: 30px; border-radius: 10px; max-width: 600px; margin: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+          <div style="font-family: sans-serif; padding: 40px 20px; background: #f5f5f5;">
+            <div style="background: white; padding: 40px; border-radius: 16px; max-width: 600px; margin: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
               
-              <h1 style="color: #6b21a8; text-align: center; margin-bottom: 30px;">Time Capsule Unlocked 🔓</h1>
+              <div style="text-align: center; margin-bottom: 30px;">
+                 <h1 style="color: #6b21a8; font-size: 28px; margin: 0;">Time Capsule Unlocked 🔓</h1>
+              </div>
               
-              <p style="font-size: 16px; color: #555;">Hello,</p>
-              <p style="font-size: 16px; color: #555; line-height: 1.6;">
-                <strong>${capsule.user.name}</strong> sealed a message for you on <strong>${new Date(capsule.createdAt).toDateString()}</strong>. The time has finally come to open it.
+              <p style="font-size: 16px; color: #555; line-height: 1.6; text-align: center;">
+                <strong>${capsule.user.name}</strong> sealed a special memory for you on <strong>${new Date(capsule.createdAt).toDateString()}</strong>.
+              </p>
+              
+              <div style="margin: 40px 0; text-align: center;">
+                <a href="${viewLink}" style="background: #6b21a8; color: white; padding: 16px 32px; border-radius: 50px; text-decoration: none; font-weight: bold; font-size: 18px; display: inline-block; box-shadow: 0 4px 15px rgba(107, 33, 168, 0.3);">
+                  View Full Memory
+                </a>
+              </div>
+
+              <p style="font-size: 14px; color: #888; text-align: center; margin-bottom: 0;">
+                Click the button above to read the message and view any attached photos or videos.
               </p>
               
               <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
               
-              <h2 style="color: #333; margin-bottom: 15px;">"${capsule.title}"</h2>
-              
-              <div style="background: #fafafa; padding: 20px; border-radius: 8px; border-left: 4px solid #6b21a8;">
-                <p style="font-size: 16px; line-height: 1.8; color: #333; margin: 0; white-space: pre-wrap;">${capsule.message}</p>
-              </div>
-
-              ${capsule.fileUrl ? `
-                <div style="margin-top: 30px; text-align: center;">
-                  <p style="font-weight: bold; color: #555; margin-bottom: 10px;">Attached Memory:</p>
-                  
-                  <img src="cid:memory-image" alt="Attached Memory" style="max-width: 100%; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" />
-                  
-                </div>
-              ` : ""}
-              
-              <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
-              
-              <p style="font-size: 12px; color: #888; text-align: center;">
-                Powered by GhostPost - Digital Legacy Vault
+              <p style="font-size: 12px; color: #aaa; text-align: center;">
+                Secured by GhostPost Legacy Vault
               </p>
             </div>
           </div>
         `,
       });
 
-      // 3. Mark as Sent
+      // 4. Mark as Sent
       await prisma.capsule.update({
         where: { id: capsule.id },
         data: { isSent: true, status: "OPEN" },
@@ -100,6 +95,7 @@ export async function GET() {
     }
 
     return NextResponse.json({ success: true, count: capsulesToSend.length });
+
   } catch (error) {
     console.error("Cron Error:", error);
     return NextResponse.json({ error: "Cron Failed" }, { status: 500 });

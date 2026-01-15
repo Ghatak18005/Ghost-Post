@@ -3,8 +3,9 @@ import prisma from "@/lib/prisma";
 import Pricing from "@/components/Pricing";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Plus, Lock, Unlock, Ban } from "lucide-react";
+import { Plus, Lock, Unlock, Ban, Video } from "lucide-react";
 import CapsuleActions from "./CapsuleActions"; 
+import { decrypt } from "@/lib/crypto"; // 👈 1. IMPORT DECRYPT HELPER
 
 // Force dynamic so we always see fresh data
 export const dynamic = "force-dynamic";
@@ -14,8 +15,8 @@ export default async function Dashboard() {
 
   if (!session?.user?.id) return redirect("/api/auth/signin");
 
-  // 1. Fetch User AND their Capsules
-  const user = await prisma.user.findUnique({
+  // 2. Fetch User AND their Capsules (RAW / ENCRYPTED DATA)
+  const rawUser = await prisma.user.findUnique({
     where: { id: session.user.id },
     include: {
       capsules: {
@@ -24,9 +25,22 @@ export default async function Dashboard() {
     },
   });
 
-  if (!user) return redirect("/api/auth/signin");
+  if (!rawUser) return redirect("/api/auth/signin");
 
-  // 2. Logic for Limits
+  // 3. 🔓 DECRYPT EVERYTHING FOR DISPLAY
+  // We map over the raw capsules and unscramble the Title, Message, and File
+  const user = {
+    ...rawUser,
+    capsules: rawUser.capsules.map(c => ({
+      ...c,
+      title: decrypt(c.title),
+      message: decrypt(c.message),
+      fileUrl: c.fileUrl ? decrypt(c.fileUrl) : null,
+      // Dates and IDs are never encrypted, so they stay as-is
+    }))
+  };
+
+  // 4. Logic for Limits (Plan Limits)
   const PLAN_LIMITS = {
     FREE: 3,
     TIME_KEEPER: 10,
@@ -121,31 +135,47 @@ export default async function Dashboard() {
                       </span>
                     </div>
 
-                    {/* --- 🖼️ IMAGE DISPLAY LOGIC --- */}
+                    {/* --- 🎥 MEDIA DISPLAY LOGIC --- */}
                     {capsule.fileUrl && (
-                      <div className="w-full h-32 mb-4 rounded-xl overflow-hidden relative border border-neutral-800">
-                        {isUnlocked ? (
-                          // 🔓 UNLOCKED: Show Real Image
-                          <img 
-                            src={capsule.fileUrl} 
-                            alt="Memory" 
-                            className="w-full h-full object-cover transition-transform hover:scale-105"
-                          />
-                        ) : (
-                          // 🔒 LOCKED: Show Blurred Image + Lock Icon
-                          <div className="w-full h-full bg-neutral-800 relative">
-                            <img 
+                      <div className="w-full h-32 mb-4 rounded-xl overflow-hidden relative border border-neutral-800 bg-black">
+                        
+                        {/* 1. CHECK IF VIDEO */}
+                        {capsule.fileUrl.startsWith("data:video") ? (
+                          isUnlocked ? (
+                            // 🔓 UNLOCKED VIDEO
+                            <video 
                               src={capsule.fileUrl} 
-                              alt="Locked" 
-                              className="w-full h-full object-cover opacity-30 blur-md"
+                              controls 
+                              className="w-full h-full object-cover" 
                             />
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <div className="bg-black/50 p-2 rounded-full">
-                                <Lock className="text-white/80" size={20} />
+                          ) : (
+                            // 🔒 LOCKED VIDEO (Show placeholder)
+                            <div className="w-full h-full flex items-center justify-center relative">
+                              <div className="absolute inset-0 bg-neutral-900 opacity-50" />
+                              <div className="z-10 flex flex-col items-center gap-2">
+                                <div className="bg-black/50 p-3 rounded-full border border-white/10">
+                                  <Lock className="text-white/80" size={20} />
+                                </div>
+                                <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest">Video Sealed</span>
                               </div>
                             </div>
-                          </div>
+                          )
+                        ) : (
+                          // 2. IS IMAGE
+                          isUnlocked ? (
+                            <img src={capsule.fileUrl} alt="Memory" className="w-full h-full object-cover transition-transform hover:scale-105" />
+                          ) : (
+                            <div className="w-full h-full bg-neutral-800 relative">
+                              <img src={capsule.fileUrl} alt="Locked" className="w-full h-full object-cover opacity-30 blur-md" />
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="bg-black/50 p-2 rounded-full">
+                                  <Lock className="text-white/80" size={20} />
+                                </div>
+                              </div>
+                            </div>
+                          )
                         )}
+                        
                       </div>
                     )}
 
@@ -177,7 +207,6 @@ export default async function Dashboard() {
           )}
         </section>
 
-        {/* --- PRICING SECTION --- */}
         
 
       </div>
